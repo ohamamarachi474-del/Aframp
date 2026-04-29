@@ -9,14 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Wallet, Zap, Coins, ExternalLink, Loader2, AlertTriangle } from 'lucide-react'
+import { Wallet, Zap, Coins, ExternalLink, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWalletConnect } from '@/hooks/use-wallet-connect'
-
-// Check if demo mode is enabled
-const isDemoMode = () => {
-  return process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
-}
 
 // Wallet provider type definitions
 declare global {
@@ -30,6 +25,9 @@ declare global {
     }
     coinbaseWalletProvider?: {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+    }
+    freighterApi?: {
+      getPublicKey: () => Promise<string>
     }
   }
 }
@@ -46,8 +44,8 @@ interface WalletOption {
 const walletOptions: WalletOption[] = [
   // Ethereum Wallets
   {
-    id: 'metamask',
-    name: 'MetaMask',
+    id: 'freighter',
+    name: 'Freighter',
     icon: (
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
         <path
@@ -76,8 +74,8 @@ const walletOptions: WalletOption[] = [
         />
       </svg>
     ),
-    chain: 'Ethereum',
-    description: 'Connect using MetaMask',
+    chain: 'Stellar',
+    description: 'Connect using Freighter',
     popular: true,
   },
   {
@@ -164,31 +162,16 @@ const walletOptions: WalletOption[] = [
   },
   // Stellar Wallets
   {
-    id: 'lobstr',
-    name: 'Lobstr',
+    id: 'freighter',
+    name: 'Freighter',
     icon: (
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="10" fill="#7D00FF" />
-        <path d="M12 6v12M6 12h12" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <svg className="w-6 h-6" viewBox="0 0 40 40" fill="currentColor">
+        <path d="M20 5L5 15v10l15 10 15-10V15L20 5zm0 3.5L31 16l-11 7.5L9 16l11-7.5zM8 18.5l10 6.5v8L8 26.5v-8zm24 0v8l-10 6.5v-8l10-6.5z" />
       </svg>
     ),
     chain: 'Stellar',
-    description: 'Connect using Lobstr',
-  },
-  {
-    id: 'stellar-xlm',
-    name: 'Stellar XLM',
-    icon: (
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="10" fill="#7D00FF" />
-        <path
-          d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-          fill="white"
-        />
-      </svg>
-    ),
-    chain: 'Stellar',
-    description: 'Connect using Stellar',
+    description: 'Connect using Freighter (Stellar)',
+    popular: true,
   },
 ]
 
@@ -222,8 +205,8 @@ export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalPro
         throw new Error('Wallet not found')
       }
 
-      const { address, walletName, isDemoMode } = await connectWallet({ id: walletId, name: wallet.name })
-      storeAndNavigate(address, walletName, isDemoMode)
+      const { address, walletName } = await connectWallet({ id: walletId, name: wallet.name })
+      storeAndNavigate(address, walletName)
       onOpenChange(false)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect wallet'
@@ -268,21 +251,7 @@ export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalPro
         {/* Error Message */}
         {error && (
           <div className="px-6 py-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg mx-6 mb-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-200">
-                  Connection Failed
-                </p>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-                {!isDemoMode() && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-                    Demo mode is disabled. Please install the required wallet extension or enable
-                    demo mode for testing.
-                  </p>
-                )}
-              </div>
-            </div>
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 
