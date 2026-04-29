@@ -16,7 +16,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { BillerSchema } from '@/lib/biller-schemas'
-import { PaymentMethod, PaymentMethodSelector } from './payment-method-selector'
+import {
+  PaymentMethod,
+  PaymentMethodSelector,
+  MobileMoneyPaymentDetails,
+} from './payment-method-selector'
 import { FeeBreakdown } from './fee-breakdown'
 import { QRInvoiceModal } from './qr-invoice-modal'
 import { toast } from 'sonner'
@@ -27,12 +31,17 @@ import { generateInvoiceId, type QRInvoiceData } from '@/lib/bills/qr-invoice'
 
 interface PaymentFormProps {
   schema: BillerSchema
+  /** ISO 3166-1 alpha-2 country code for regional payment method filtering */
+  countryCode?: string
 }
 
-export function PaymentForm({ schema }: PaymentFormProps) {
+export function PaymentForm({ schema, countryCode }: PaymentFormProps) {
   const [isValidating, setIsValidating] = useState(false)
   const [validatedAccount, setValidatedAccount] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card')
+  const [mobileMoneyDetails, setMobileMoneyDetails] = useState<MobileMoneyPaymentDetails | null>(
+    null
+  )
   const [isProcessing, setIsProcessing] = useState(false)
   const [showSchedule, setShowSchedule] = useState(false)
   const [invoice, setInvoice] = useState<QRInvoiceData | null>(null)
@@ -100,6 +109,85 @@ export function PaymentForm({ schema }: PaymentFormProps) {
   }, [accountValue, errors, primaryFieldName, validatedAccount])
   const onSubmit = async (_data: FormValues) => {
     setIsProcessing(true)
+
+    try {
+      if (paymentMethod === 'mpesa' || paymentMethod === 'mtn_momo') {
+        if (!mobileMoneyDetails) {
+          toast.error('Please enter a valid mobile number before paying.')
+          setIsProcessing(false)
+          return
+        }
+
+        // Initiate mobile money payment
+        const initiateRes = await fetch('/api/payments/mobile-money/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: mobileMoneyDetails.provider,
+            phoneNumber: mobileMoneyDetails.phoneNumber,
+            amount: parsedAmount,
+            currency: 'KES', // TODO: derive from countryCode
+            accountReference: schema.id.slice(0, 12),
+            transactionDesc: `Pay ${schema.name}`.slice(0, 13),
+            externalId: crypto.randomUUID(),
+          }),
+        })
+
+        if (!initiateRes.ok) {
+          const err = await initiateRes.json().catch(() => ({}))
+          throw new Error((err as { error?: string }).error ?? 'Payment initiation failed')
+        }
+
+        const { transactionId, provider } = (await initiateRes.json()) as {
+          transactionId: string
+          provider: string
+        }
+
+        toast.info('Check your phone', {
+          description: 'A payment prompt has been sent to your mobile number.',
+        })
+
+        // Poll for confirmation (up to ~60 s)
+        let confirmed = false
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 3_000))
+
+          const statusRes = await fetch(
+            `/api/payments/mobile-money/status/${transactionId}?provider=${provider}`
+          )
+          const statusData = (await statusRes.json()) as { status: string; error?: string }
+
+          if (statusData.status === 'SUCCESSFUL') {
+            confirmed = true
+            break
+          }
+          if (
+            statusData.status === 'FAILED' ||
+            statusData.status === 'CANCELLED' ||
+            statusData.status === 'INSUFFICIENT_FUNDS'
+          ) {
+            throw new Error(statusData.error ?? `Payment ${statusData.status.toLowerCase()}`)
+          }
+        }
+
+        if (!confirmed) {
+          throw new Error('Payment timed out. Please try again.')
+        }
+      } else {
+        // Existing mock flow for card / bank_transfer / wallet
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+
+      toast.success('Payment Successful!', {
+        description: `Your payment to ${schema.name} has been processed.`,
+      })
+    } catch (err) {
+      toast.error('Payment failed', {
+        description: err instanceof Error ? err.message : 'An unexpected error occurred.',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
     await new Promise((resolve) => setTimeout(resolve, 3000))
     setIsProcessing(false)
 
@@ -225,7 +313,12 @@ export function PaymentForm({ schema }: PaymentFormProps) {
         })}
 
         <div className="pt-4">
-          <PaymentMethodSelector selected={paymentMethod} onSelect={setPaymentMethod} />
+          <PaymentMethodSelector
+            selected={paymentMethod}
+            onSelect={setPaymentMethod}
+            countryCode={countryCode}
+            onMobileMoneyDetails={setMobileMoneyDetails}
+          />
         </div>
 
         <div className="space-y-4">
