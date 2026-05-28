@@ -714,8 +714,8 @@ export function TransactionHistory() {
                       <motion.div
                         animate={{ x: isSwipeActive ? -88 : 0 }}
                         transition={{ duration: 0.2 }}
-                        onTouchStart={(e) => onTouchStart(e.changedTouches[0].clientX)}
-                        onTouchEnd={(e) => onTouchEnd(e.changedTouches[0].clientX, tx.id)}
+                        onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => onTouchStart(e.changedTouches[0].clientX)}
+                        onTouchEnd={(e: React.TouchEvent<HTMLDivElement>) => onTouchEnd(e.changedTouches[0].clientX, tx.id)}
                         className="relative z-10 bg-card p-3 h-full flex flex-col justify-center"
                       >
                         <div className="flex items-center justify-between gap-3">
